@@ -19,12 +19,12 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "strict": true,
-    "typeRoots": ["./node_modules_dev/@types", "./node_modules/@types"],
+    "typeRoots": ["./node_modules/@types"],
     "paths": {
       "@/*": ["src/*"]
     }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "node_modules_dev", "dist", "test", "**/*spec.ts"],
-  "typeRoots": ["./node_modules_dev/@types", "./node_modules/@types"]
+  "typeRoots": ["./node_modules/@types"]
 }
