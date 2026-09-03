@@ -1,0 +1,11 @@
+Options -MultiViews
+RewriteEngine On
+
+# Block direct access to sensitive files
+RewriteRule ^\.env - [F,L]
+RewriteRule ^package\.json - [F,L]
+RewriteRule ^tsconfig.*$ - [F,L]
+RewriteRule ^prisma/ - [F,L]
+
+# Passenger (cPanel Node.js) handles everything else
+# No proxy rules needed — cPanel Passenger does this automatically

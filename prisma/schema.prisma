@@ -1,0 +1,861 @@
+// Lottery SaaS Platform - Prisma Schema
+// PostgreSQL + Full Multi-Tenant Architecture
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum SubscriptionStatus {
+  PENDING
+  AWAITING_PAYMENT
+  UNDER_REVIEW
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum LotteryStatus {
+  DRAFT
+  PUBLISHED
+  SELLING
+  CLOSED
+  DRAWING
+  COMPLETED
+  ARCHIVED
+}
+
+enum LotteryType {
+  STANDARD
+  RAFFLE
+  SCRATCH_CARD
+  INSTANT_WIN
+}
+
+enum LotteryVisibility {
+  PUBLIC
+  PRIVATE
+  UNLISTED
+}
+
+enum TicketStatus {
+  AVAILABLE
+  RESERVED
+  PENDING_PAYMENT
+  SOLD
+  CANCELLED
+}
+
+enum PaymentStatus {
+  INITIATED
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  MANUAL_BANK_TRANSFER
+  STRIPE
+  PAYPAL
+  FLUTTERWAVE
+  CHAPA
+  TELEBIRR
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  PUSH
+  IN_APP
+  WEBSOCKET
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum DrawMethod {
+  RANDOM_SYSTEM
+  MANUAL
+  THIRD_PARTY
+}
+
+enum PrizeStatus {
+  ACTIVE
+  CLAIMED
+  UNCLAIMED
+  VOID
+}
+
+enum ExportFormat {
+  EXCEL
+  CSV
+  PDF
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  APPROVE
+  REJECT
+  SUSPEND
+  ACTIVATE
+  DRAW
+  ASSIGN
+  EXPORT
+  UPLOAD
+  DOWNLOAD
+}
+
+// ==================== UNIFIED AUTH ====================
+
+enum UserRole {
+  client
+  buyer
+  staff
+  super_admin
+}
+
+model User {
+  id               String     @id @default(uuid())
+  email            String?
+  phone            String?
+  name             String
+  password         String
+  role             UserRole
+  status           UserStatus @default(ACTIVE)
+  clientId         String?
+  legacyId         String
+  legacyTable      String
+  lastLoginAt      DateTime?
+  failedLoginCount Int        @default(0)
+  lockedUntil      DateTime?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  deletedAt        DateTime?
+
+  client           Client?    @relation(fields: [clientId], references: [id])
+
+  @@unique([legacyId, legacyTable])
+  @@map("users")
+}
+
+// ==================== CORE IDENTITY ====================
+
+model Admin {
+  id                String      @id @default(uuid())
+  email             String      @unique
+  password          String
+  name              String
+  phone             String?
+  avatar            String?
+  role              String      @default("admin")
+  status            UserStatus  @default(PENDING_VERIFICATION)
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  failedLoginCount  Int         @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  sessions          Session[]
+
+  @@map("admins")
+}
+
+model Client {
+  id                String       @id @default(uuid())
+  email             String       @unique
+  username          String?      @unique
+  password          String
+  name              String
+  businessName      String
+  phone             String?
+  logo              String?
+  website           String?
+  address           String?
+  city              String?
+  countryId         String?
+  isVerified        Boolean      @default(false)
+  verifiedAt        DateTime?
+  status            ClientStatus @default(PENDING)
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  failedLoginCount  Int          @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+
+  country           Country?     @relation(fields: [countryId], references: [id])
+  subscriptions     Subscription[]
+  lotteries         Lottery[]
+  buyers            Buyer[]
+  bankAccounts      BankAccount[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  sessions          Session[]
+  notifications     Notification[]
+  apiKeys           ApiKey[]
+  webhookEvents     WebhookEvent[]
+  staff             ClientStaff[]
+  users             User[]
+
+  @@map("clients")
+}
+
+enum StaffRole {
+  APPROVER
+  VIEWER
+}
+
+model ClientStaff {
+  id            String      @id @default(uuid())
+  clientId      String
+  name          String
+  email         String
+  password      String
+  role          StaffRole   @default(VIEWER)
+  isActive      Boolean     @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+
+  client        Client      @relation(fields: [clientId], references: [id])
+  approvedPayments  PaymentTransaction[] @relation("ApprovedByStaff")
+  rejectedPayments  PaymentTransaction[] @relation("RejectedByStaff")
+  refreshTokens     RefreshToken[]
+
+  @@unique([clientId, email])
+  @@map("client_staff")
+}
+
+model Buyer {
+  id                String     @id @default(uuid())
+  clientId          String
+  email             String?
+  name              String
+  phone             String?
+  password          String?
+  isGuest           Boolean    @default(false)
+  guestToken        String?    @unique
+  status            UserStatus @default(ACTIVE)
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  deletedAt         DateTime?
+
+  client            Client     @relation(fields: [clientId], references: [id])
+  tickets           LotteryTicket[]
+  payments          PaymentTransaction[]
+  refreshTokens     RefreshToken[]
+  notifications     Notification[]
+
+  @@unique([clientId, email])
+  @@map("buyers")
+}
+
+// ==================== AUTH ====================
+
+model RefreshToken {
+  id          String    @id @default(uuid())
+  token       String    @unique
+  adminId     String?
+  clientId    String?
+  buyerId     String?
+  staffId     String?
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  admin       Admin?       @relation(fields: [adminId], references: [id])
+  client      Client?      @relation(fields: [clientId], references: [id])
+  buyer       Buyer?       @relation(fields: [buyerId], references: [id])
+  staff       ClientStaff? @relation(fields: [staffId], references: [id])
+
+  @@map("refresh_tokens")
+}
+
+model Session {
+  id          String    @id @default(uuid())
+  adminId     String?
+  clientId    String?
+  ipAddress   String?
+  userAgent   String?
+  lastActive  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  admin       Admin?    @relation(fields: [adminId], references: [id])
+  client      Client?   @relation(fields: [clientId], references: [id])
+
+  @@map("sessions")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  clientId    String
+  name        String
+  keyHash     String    @unique
+  permissions String[]
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  client      Client    @relation(fields: [clientId], references: [id])
+
+  @@map("api_keys")
+}
+
+// ==================== PLANS & SUBSCRIPTIONS ====================
+
+model Plan {
+  id                    String       @id @default(uuid())
+  name                  String
+  slug                  String       @unique
+  description           String?
+  monthlyPrice          Decimal      @db.Decimal(10, 2)
+  yearlyPrice           Decimal      @db.Decimal(10, 2)
+  maxLotteriesPerCycle  Int
+  maxActiveLotteries    Int
+  maxTicketsPerLottery  Int
+  minTicketPrice        Decimal      @db.Decimal(10, 2)
+  maxTicketPrice        Decimal      @db.Decimal(10, 2)
+  storageQuotaGb        Int
+  lotteryTypesAllowed   LotteryType[]
+  hasReporting          Boolean      @default(true)
+  hasApiAccess          Boolean      @default(false)
+  supportLevel          String       @default("basic")
+  isActive              Boolean      @default(true)
+  sortOrder             Int          @default(0)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  deletedAt             DateTime?
+
+  subscriptions         Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                  String             @id @default(uuid())
+  clientId            String
+  planId              String
+  status              SubscriptionStatus @default(PENDING)
+  billingCycle        BillingCycle
+  price               Decimal            @db.Decimal(10, 2)
+  startsAt            DateTime?
+  expiresAt           DateTime?
+  cancelledAt         DateTime?
+  lotteriesUsed       Int                @default(0)
+  storageUsedGb       Decimal            @default(0) @db.Decimal(10, 4)
+  autoRenew           Boolean            @default(true)
+  notes               String?
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  client              Client             @relation(fields: [clientId], references: [id])
+  plan                Plan               @relation(fields: [planId], references: [id])
+  transactions        SubscriptionTransaction[]
+
+  @@map("subscriptions")
+}
+
+model SubscriptionTransaction {
+  id             String        @id @default(uuid())
+  subscriptionId String
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("ETB")
+  status         PaymentStatus @default(INITIATED)
+  provider       PaymentProvider @default(MANUAL_BANK_TRANSFER)
+  referenceCode  String        @unique @default(uuid())
+  notes          String?
+  metadata       Json?
+  paidAt         DateTime?
+  approvedAt     DateTime?
+  rejectionReason String?
+  reviewedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id])
+  slips          PaymentSlip[]
+
+  @@map("subscription_transactions")
+}
+
+// ==================== LOTTERY ====================
+
+model Lottery {
+  id              String            @id @default(uuid())
+  clientId        String
+  subscriptionId  String?
+  name            String
+  slug            String
+  description     String?
+  type            LotteryType       @default(STANDARD)
+  banner          String?
+  ticketPrice     Decimal           @db.Decimal(10, 2)
+  totalTickets    Int
+  ticketStart     Int               @default(1)
+  ticketEnd       Int?
+  ticketsSold     Int               @default(0)
+  saleStartDate   DateTime
+  saleEndDate     DateTime
+  drawDate        DateTime
+  status          LotteryStatus     @default(DRAFT)
+  visibility      LotteryVisibility @default(PUBLIC)
+  termsConditions String?
+  drawHash        String?
+  drawSeed        String?
+  drawnAt         DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  client          Client            @relation(fields: [clientId], references: [id])
+  prizes          LotteryPrize[]
+  images          LotteryImage[]
+  tickets         LotteryTicket[]
+  draws           LotteryDraw[]
+  winners         LotteryWinner[]
+  reservations    TicketReservation[]
+  payments        PaymentTransaction[]
+  reports         Report[]
+  exports         Export[]
+
+  @@unique([clientId, slug])
+  @@map("lotteries")
+}
+
+model LotteryImage {
+  id        String   @id @default(uuid())
+  lotteryId String
+  fileId    String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  lottery   Lottery  @relation(fields: [lotteryId], references: [id], onDelete: Cascade)
+  file      File     @relation(fields: [fileId], references: [id])
+
+  @@map("lottery_images")
+}
+
+model LotteryPrize {
+  id          String      @id @default(uuid())
+  lotteryId   String
+  rank        Int
+  title       String
+  description String?
+  prizeValue  Decimal     @db.Decimal(12, 2)
+  quantity    Int         @default(1)
+  status      PrizeStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  lottery     Lottery     @relation(fields: [lotteryId], references: [id], onDelete: Cascade)
+  winners     LotteryWinner[]
+
+  @@map("lottery_prizes")
+}
+
+model LotteryTicket {
+  id              String       @id @default(uuid())
+  lotteryId       String
+  clientId        String
+  buyerId         String?
+  ticketNumber    String
+  status          TicketStatus @default(AVAILABLE)
+  purchasedAt     DateTime?
+  assignedAt      DateTime?
+  paymentId       String?
+  reservationId   String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  lottery         Lottery      @relation(fields: [lotteryId], references: [id])
+  buyer           Buyer?       @relation(fields: [buyerId], references: [id])
+  payment         PaymentTransaction? @relation(fields: [paymentId], references: [id])
+  reservation     TicketReservation? @relation(fields: [reservationId], references: [id])
+  winner          LotteryWinner?
+
+  @@unique([lotteryId, ticketNumber])
+  @@map("lottery_tickets")
+}
+
+model TicketReservation {
+  id          String       @id @default(uuid())
+  lotteryId   String
+  clientId    String
+  buyerEmail  String?
+  buyerName   String
+  buyerPhone  String?
+  quantity    Int
+  expiresAt   DateTime
+  confirmedAt DateTime?
+  cancelledAt DateTime?
+  idempotencyKey String?  @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  lottery     Lottery      @relation(fields: [lotteryId], references: [id])
+  tickets     LotteryTicket[]
+
+  @@map("ticket_reservations")
+}
+
+// ==================== PAYMENTS ====================
+
+model PaymentTransaction {
+  id              String          @id @default(uuid())
+  clientId        String
+  lotteryId       String?
+  buyerId         String?
+  amount          Decimal         @db.Decimal(10, 2)
+  currency        String          @default("ETB")
+  status          PaymentStatus   @default(INITIATED)
+  provider        PaymentProvider @default(MANUAL_BANK_TRANSFER)
+  referenceCode   String          @unique @default(uuid())
+  idempotencyKey  String?         @unique
+  rejectionReason String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  approvedAt      DateTime?
+  approvedByStaffId String?
+  rejectedByStaffId String?
+  refundedAt      DateTime?
+  refundReason    String?
+  notes           String?
+  metadata        Json?
+  deletedAt       DateTime?
+  deleteReason    String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lottery         Lottery?        @relation(fields: [lotteryId], references: [id])
+  buyer           Buyer?          @relation(fields: [buyerId], references: [id])
+  approvedByStaff ClientStaff?    @relation("ApprovedByStaff", fields: [approvedByStaffId], references: [id])
+  rejectedByStaff ClientStaff?    @relation("RejectedByStaff", fields: [rejectedByStaffId], references: [id])
+  slips           PaymentSlip[]
+  tickets         LotteryTicket[]
+
+  @@map("payment_transactions")
+}
+
+model PaymentSlip {
+  id                        String                   @id @default(uuid())
+  paymentTransactionId      String?
+  subscriptionTransactionId String?
+  fileId                    String
+  receiptUrl                String?                  // QR-decoded URL extracted at upload time (e.g. https://mbreciept.cbe.com.et/…)
+  uploadedAt                DateTime                 @default(now())
+
+  paymentTransaction      PaymentTransaction?      @relation(fields: [paymentTransactionId], references: [id])
+  subscriptionTransaction SubscriptionTransaction? @relation(fields: [subscriptionTransactionId], references: [id])
+  file                    File                     @relation(fields: [fileId], references: [id])
+
+  @@map("payment_slips")
+}
+
+// ==================== DRAW & WINNERS ====================
+
+model LotteryDraw {
+  id          String     @id @default(uuid())
+  lotteryId   String
+  drawMethod  DrawMethod @default(RANDOM_SYSTEM)
+  seed        String
+  hash        String
+  algorithm   String     @default("SHA256_MERSENNE_TWISTER")
+  drawnAt     DateTime
+  drawnById   String?
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+
+  lottery     Lottery    @relation(fields: [lotteryId], references: [id])
+  winners     LotteryWinner[]
+
+  @@map("lottery_draws")
+}
+
+model LotteryWinner {
+  id           String       @id @default(uuid())
+  lotteryId    String
+  drawId       String
+  prizeId      String
+  ticketId     String       @unique
+  buyerId      String?
+  guestName    String?
+  guestEmail   String?
+  publishedAt  DateTime?
+  claimedAt    DateTime?
+  createdAt    DateTime     @default(now())
+
+  lottery      Lottery      @relation(fields: [lotteryId], references: [id])
+  draw         LotteryDraw  @relation(fields: [drawId], references: [id])
+  prize        LotteryPrize @relation(fields: [prizeId], references: [id])
+  ticket       LotteryTicket @relation(fields: [ticketId], references: [id])
+
+  @@map("lottery_winners")
+}
+
+// ==================== FILES ====================
+
+model File {
+  id             String    @id @default(uuid())
+  originalName   String
+  storedName     String
+  mimeType       String
+  sizeBytes      Int
+  bucket         String
+  path           String
+  url            String?
+  contentHash    String?   // SHA-256 of the file buffer — used for duplicate slip detection
+  uploadedById   String?
+  uploadedByType String?   // admin | client | buyer
+  isScanned      Boolean   @default(false)
+  isSafe         Boolean?
+  createdAt      DateTime  @default(now())
+
+  slips          PaymentSlip[]
+  lotteryImages  LotteryImage[]
+
+  @@map("files")
+}
+
+// ==================== NOTIFICATIONS ====================
+
+model NotificationTemplate {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  channel     NotificationChannel
+  subject     String?
+  body        String
+  variables   String[]
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  notifications Notification[]
+
+  @@map("notification_templates")
+}
+
+model Notification {
+  id           String              @id @default(uuid())
+  clientId     String?
+  buyerId      String?
+  templateId   String?
+  channel      NotificationChannel
+  recipient    String
+  subject      String?
+  body         String
+  status       NotificationStatus  @default(PENDING)
+  sentAt       DateTime?
+  readAt       DateTime?
+  failureReason String?
+  retryCount   Int                 @default(0)
+  metadata     Json?
+  createdAt    DateTime            @default(now())
+
+  client       Client?             @relation(fields: [clientId], references: [id])
+  buyer        Buyer?              @relation(fields: [buyerId], references: [id])
+  template     NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@map("notifications")
+}
+
+// ==================== REPORTING ====================
+
+model Report {
+  id          String      @id @default(uuid())
+  clientId    String?
+  lotteryId   String?
+  type        String
+  filters     Json?
+  data        Json?
+  generatedAt DateTime    @default(now())
+
+  lottery     Lottery?    @relation(fields: [lotteryId], references: [id])
+
+  @@map("reports")
+}
+
+model Export {
+  id          String       @id @default(uuid())
+  clientId    String?
+  lotteryId   String?
+  type        String
+  format      ExportFormat
+  status      ExportStatus @default(PENDING)
+  filters     Json?
+  fileId      String?
+  requestedAt DateTime     @default(now())
+  completedAt DateTime?
+  expiresAt   DateTime?
+  error       String?
+
+  lottery     Lottery?     @relation(fields: [lotteryId], references: [id])
+
+  @@map("exports")
+}
+
+// ==================== AUDIT & ACTIVITY ====================
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  adminId     String?
+  clientId    String?
+  entityType  String
+  entityId    String
+  action      AuditAction
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  userAgent   String?
+  device      String?
+  createdAt   DateTime    @default(now())
+
+  admin       Admin?      @relation(fields: [adminId], references: [id])
+  client      Client?     @relation(fields: [clientId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// ==================== LOOKUP TABLES ====================
+
+model Country {
+  id        String    @id @default(uuid())
+  name      String
+  code      String    @unique
+  dialCode  String?
+  isActive  Boolean   @default(true)
+
+  clients   Client[]
+  banks     Bank[]
+
+  @@map("countries")
+}
+
+model Currency {
+  id        String  @id @default(uuid())
+  name      String
+  code      String  @unique
+  symbol    String
+  isActive  Boolean @default(true)
+
+  @@map("currencies")
+}
+
+model Bank {
+  id        String  @id @default(uuid())
+  name      String
+  code      String?
+  countryId String?
+  isActive  Boolean @default(true)
+
+  country   Country? @relation(fields: [countryId], references: [id])
+  accounts  BankAccount[]
+
+  @@map("banks")
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  clientId      String?
+  bankId        String
+  accountName   String
+  accountNumber String
+  branchName    String?
+  isDefault     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  client        Client?  @relation(fields: [clientId], references: [id])
+  bank          Bank     @relation(fields: [bankId], references: [id])
+
+  @@map("bank_accounts")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  group     String   @default("general")
+  isPublic  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+model WebhookEvent {
+  id        String   @id @default(uuid())
+  clientId  String?
+  eventType String
+  payload   Json
+  status    String   @default("PENDING")
+  attempts  Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client    Client?  @relation(fields: [clientId], references: [id])
+
+  @@map("webhook_events")
+}
