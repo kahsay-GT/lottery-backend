@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bull';
-import { CacheModule } from '@nestjs/cache-manager';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -52,9 +51,6 @@ import { RolesGuard } from './common/guards/roles.guard';
         limit: config.get<number>('throttle.limit') || 100,
       }]),
     }),
-
-    // Cache
-    CacheModule.register({ isGlobal: true, ttl: 300 }),
 
     // Event Emitter
     EventEmitterModule.forRoot(),
