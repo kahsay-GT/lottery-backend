@@ -40,6 +40,16 @@ export class TicketController {
   }
 
   @Public()
+  @Get('lottery/:lotteryId/available-numbers')
+  @ApiOperation({ summary: 'List available ticket numbers for a lottery (public, for picker UI)' })
+  getAvailableNumbers(
+    @Param('lotteryId') lotteryId: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.ticketService.getAvailableTicketNumbers(lotteryId, limit ? Number(limit) : 500);
+  }
+
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get a ticket by ID' })
   getTicket(@Param('id') id: string) {

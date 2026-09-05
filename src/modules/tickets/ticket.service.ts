@@ -271,4 +271,25 @@ export class TicketService {
     if (!ticket) throw new NotFoundException('Ticket not found');
     return ticket;
   }
+
+  /**
+   * Returns the list of available ticket numbers for a lottery.
+   * Used by the public picker UI so buyers can choose specific numbers.
+   * Returns at most `limit` numbers (default 500) sorted numerically.
+   */
+  async getAvailableTicketNumbers(lotteryId: string, limit = 500): Promise<string[]> {
+    const lottery = await this.prisma.lottery.findUnique({
+      where: { id: lotteryId, deletedAt: null },
+    });
+    if (!lottery) throw new NotFoundException('Lottery not found');
+
+    const tickets = await this.prisma.lotteryTicket.findMany({
+      where: { lotteryId, status: 'AVAILABLE' },
+      select: { ticketNumber: true },
+      orderBy: { ticketNumber: 'asc' },
+      take: limit,
+    });
+
+    return tickets.map((t) => t.ticketNumber);
+  }
 }
