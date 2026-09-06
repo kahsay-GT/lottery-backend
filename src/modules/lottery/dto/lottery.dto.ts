@@ -25,7 +25,10 @@ export class CreateLotteryDto {
   @ApiProperty() @IsString() @IsNotEmpty() name!: string;
   @ApiPropertyOptional() @IsOptional() @IsString() description?: string;
 
-  @ApiProperty({ enum: LotteryType }) @IsEnum(LotteryType) type!: LotteryType;
+  @ApiPropertyOptional({ enum: LotteryType, default: LotteryType.STANDARD })
+  @IsOptional()
+  @IsEnum(LotteryType)
+  type: LotteryType = LotteryType.STANDARD;
 
   @ApiProperty() @Type(() => Number) @IsNumber() @Min(0) ticketPrice!: number;
   @ApiProperty() @Type(() => Number) @IsInt() @Min(1) totalTickets!: number;

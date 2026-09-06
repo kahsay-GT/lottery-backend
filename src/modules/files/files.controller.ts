@@ -43,7 +43,7 @@ export class FilesController {
       'Content-Type': file!.mimeType,
       'Content-Disposition': `inline; filename="${file!.originalName}"`,
       'Content-Length': buffer.length,
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'public, max-age=31536000, immutable',
       'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     res.send(buffer);
@@ -90,7 +90,7 @@ export class FilesController {
       'Content-Type': file!.mimeType,
       'Content-Disposition': `inline; filename="${file!.originalName}"`,
       'Content-Length': buffer.length,
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'public, max-age=31536000, immutable',
       'Cross-Origin-Resource-Policy': 'cross-origin',
     });
     res.send(buffer);

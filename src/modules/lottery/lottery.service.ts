@@ -414,7 +414,7 @@ export class LotteryService {
         where, skip, take,
         orderBy: { createdAt: 'desc' },
         include: {
-          client: { select: { id: true, businessName: true, logo: true } },
+          client: { select: { id: true, businessName: true, logo: true, username: true } },
           prizes: { orderBy: { rank: 'asc' }, take: 3 },
           images: { orderBy: { sortOrder: 'asc' } },
           _count: { select: { tickets: { where: { status: 'SOLD' } } } },
